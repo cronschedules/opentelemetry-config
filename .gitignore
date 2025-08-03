@@ -1,0 +1,35 @@
+# Grafana Cloud credentials and secrets
+grafana-cloud-secret.yaml
+grafana-cloud-config.yaml
+*credentials*.yaml
+
+# Allow template files
+!*template*.yaml
+!*example*.yaml
+
+# Environment files
+.env
+.env.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.pid
+
+# Helm charts cache
+charts/
+Chart.lock
