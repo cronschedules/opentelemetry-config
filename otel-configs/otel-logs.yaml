@@ -33,7 +33,7 @@ ports:
   otlp:
     enabled: false
   otlp-http:
-    enabled: false  # We'll configure this in our custom config
+    enabled: false
   jaeger-compact:
     enabled: false
   jaeger-thrift:
@@ -85,99 +85,22 @@ config:
     filelog:
       include:
         - /var/log/pods/default_cronjob-scale-down-operator-controller-manager*/*/*.log
-      start_at: end
+      start_at: beginning
       include_file_path: true
       include_file_name: false
       operators:
         # Parse container logs that are in JSON format (outer container format)
         - type: json_parser
           id: parser-docker
-          output: extract_metadata_from_filepath
           timestamp:
             parse_from: attributes.time
             layout: '%Y-%m-%dT%H:%M:%S.%LZ'
         
-        # Extract metadata from file path
-        - type: regex_parser
-          id: extract_metadata_from_filepath
-          regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$'
-          parse_from: attributes["log.file.path"]
-          output: parse_log_message
-        
-        # Parse the inner log message structure (timestamp, level, message, JSON)
-        - type: regex_parser
-          id: parse_log_message
-          regex: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\t(?P<level>\w+)\t(?P<message>[^\t]*)\t(?P<json_data>\{.*\})?\n?$'
-          parse_from: attributes.log
-          output: parse_json_data
-          on_error: send
-        
-        # Parse the JSON data within the log message
-        - type: json_parser
-          id: parse_json_data
-          parse_from: attributes.json_data
-          output: extract_controller_info
-          on_error: send
-        
-        # Extract and restructure controller-specific fields
+        # Move the actual log content to body (this becomes the message)
         - type: move
-          id: extract_controller_info
-          from: attributes.controller
-          to: attributes["k8s.controller.name"]
-          output: extract_controller_group
-          on_error: send
-        
-        - type: move
-          id: extract_controller_group
-          from: attributes.controllerGroup
-          to: attributes["k8s.controller.group"]
-          output: extract_controller_kind
-          on_error: send
-        
-        - type: move
-          id: extract_controller_kind
-          from: attributes.controllerKind
-          to: attributes["k8s.controller.kind"]
-          output: extract_reconcile_id
-          on_error: send
-        
-        - type: move
-          id: extract_reconcile_id
-          from: attributes.reconcileID
-          to: attributes["reconcile.id"]
-          output: extract_requeue_after
-          on_error: send
-        
-        - type: move
-          id: extract_requeue_after
-          from: attributes.requeueAfter
-          to: attributes["reconcile.requeue_after"]
-          output: set_log_level
-          on_error: send
-        
-        # Set the log level from parsed data
-        - type: move
-          id: set_log_level
-          from: attributes.level
-          to: attributes["log.level"]
-          output: set_log_message
-          on_error: send
-        
-        # Set the actual log message
-        - type: move
-          id: set_log_message
-          from: attributes.message
-          to: attributes["log.message"]
-          output: set_timestamp
-          on_error: send
-        
-        # Use the parsed timestamp as the log timestamp
-        - type: time_parser
-          id: set_timestamp
-          parse_from: attributes.timestamp
-          layout: '%Y-%m-%dT%H:%M:%SZ'
-          output: add_source
-          on_error: send
+          id: move_log_to_body
+          from: attributes.log
+          to: body
         
         # Add source information
         - type: add
@@ -225,6 +148,7 @@ config:
           - k8s.namespace.name
           - k8s.node.name
           - k8s.pod.start_time
+
   exporters:
     # OTLP exporter to Grafana Cloud Loki (using HTTP)
     otlphttp/grafana-logs:
